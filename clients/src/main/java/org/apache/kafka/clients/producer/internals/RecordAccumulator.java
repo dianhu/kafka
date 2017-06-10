@@ -163,21 +163,23 @@ public final class RecordAccumulator {
                                      long maxTimeToBlock) throws InterruptedException {
         // We keep track of the number of appending thread to make sure we do not miss batches in
         // abortIncompleteBatches().
-        appendsInProgress.incrementAndGet();
+        appendsInProgress.incrementAndGet();//统计正在追加数据的线程数
         try {
             // check if we have an in-progress batch
-            Deque<RecordBatch> dq = getOrCreateDeque(tp);
-            synchronized (dq) {
+            Deque<RecordBatch> dq = getOrCreateDeque(tp);//step1:查找或创建TopicPartition对应的Deque
+            synchronized (dq) {//step2:对dq对象加锁
                 if (closed)
                     throw new IllegalStateException("Cannot send after the producer is closed.");
+                //step3:向dq中最后一个RecordBatch追加Record
                 RecordAppendResult appendResult = tryAppend(timestamp, key, value, callback, dq);
                 if (appendResult != null)
                     return appendResult;
-            }
+            }//step4:同步块结束，解锁
 
             // we don't have an in-progress record batch try to allocate a new batch
             int size = Math.max(this.batchSize, Records.LOG_OVERHEAD + Record.recordSize(key, value));
             log.trace("Allocating a new {} byte message buffer for topic {} partition {}", size, tp.topic(), tp.partition());
+            //追加失败，从BufferPool中申请新空间
             ByteBuffer buffer = free.allocate(size, maxTimeToBlock);
             synchronized (dq) {
                 // Need to check if producer is closed again after grabbing the dequeue lock.
@@ -299,7 +301,7 @@ public final class RecordAccumulator {
     public ReadyCheckResult ready(Cluster cluster, long nowMs) {
         Set<Node> readyNodes = new HashSet<>();
         long nextReadyCheckDelayMs = Long.MAX_VALUE;
-        boolean unknownLeadersExist = false;
+        Set<String> unknownLeaderTopics = new HashSet<>();
 
         boolean exhausted = this.free.queued() > 0;
         for (Map.Entry<TopicPartition, Deque<RecordBatch>> entry : this.batches.entrySet()) {
@@ -307,10 +309,12 @@ public final class RecordAccumulator {
             Deque<RecordBatch> deque = entry.getValue();
 
             Node leader = cluster.leaderFor(part);
-            if (leader == null) {
-                unknownLeadersExist = true;
-            } else if (!readyNodes.contains(leader) && !muted.contains(part)) {
-                synchronized (deque) {
+            synchronized (deque) {
+                if (leader == null && !deque.isEmpty()) {
+                    // This is a partition for which leader is not known, but messages are available to send.
+                    // Note that entries are currently not removed from batches when deque is empty.
+                    unknownLeaderTopics.add(part.topic());
+                } else if (!readyNodes.contains(leader) && !muted.contains(part)) {
                     RecordBatch batch = deque.peekFirst();
                     if (batch != null) {
                         boolean backingOff = batch.attempts > 0 && batch.lastAttemptMs + retryBackoffMs > nowMs;
@@ -333,7 +337,7 @@ public final class RecordAccumulator {
             }
         }
 
-        return new ReadyCheckResult(readyNodes, nextReadyCheckDelayMs, unknownLeadersExist);
+        return new ReadyCheckResult(readyNodes, nextReadyCheckDelayMs, unknownLeaderTopics);
     }
 
     /**
@@ -353,7 +357,7 @@ public final class RecordAccumulator {
     /**
      * Drain all the data for the given nodes and collate them into a list of batches that will fit within the specified
      * size on a per-node basis. This method attempts to avoid choosing the same topic-node over and over.
-     * 
+     *
      * @param cluster The current cluster metadata
      * @param nodes The list of node to drain
      * @param maxSize The maximum number of bytes to drain
@@ -437,7 +441,7 @@ public final class RecordAccumulator {
         incomplete.remove(batch);
         free.deallocate(batch.records.buffer(), batch.records.initialCapacity());
     }
-    
+
     /**
      * Are there any threads currently waiting on a flush?
      *
@@ -451,7 +455,7 @@ public final class RecordAccumulator {
     Map<TopicPartition, Deque<RecordBatch>> batches() {
         return Collections.unmodifiableMap(batches);
     }
-    
+
     /**
      * Initiate the flushing of data from the accumulator...this makes all requests immediately ready
      */
@@ -549,12 +553,12 @@ public final class RecordAccumulator {
     public final static class ReadyCheckResult {
         public final Set<Node> readyNodes;
         public final long nextReadyCheckDelayMs;
-        public final boolean unknownLeadersExist;
+        public final Set<String> unknownLeaderTopics;
 
-        public ReadyCheckResult(Set<Node> readyNodes, long nextReadyCheckDelayMs, boolean unknownLeadersExist) {
+        public ReadyCheckResult(Set<Node> readyNodes, long nextReadyCheckDelayMs, Set<String> unknownLeaderTopics) {
             this.readyNodes = readyNodes;
             this.nextReadyCheckDelayMs = nextReadyCheckDelayMs;
-            this.unknownLeadersExist = unknownLeadersExist;
+            this.unknownLeaderTopics = unknownLeaderTopics;
         }
     }
     
