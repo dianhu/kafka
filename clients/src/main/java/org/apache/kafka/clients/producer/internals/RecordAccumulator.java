@@ -173,30 +173,32 @@ public final class RecordAccumulator {
                 //step3:向dq中最后一个RecordBatch追加Record
                 RecordAppendResult appendResult = tryAppend(timestamp, key, value, callback, dq);
                 if (appendResult != null)
-                    return appendResult;
+                    return appendResult;//step5:追加成功则直接返回
             }//step4:同步块结束，解锁
 
             // we don't have an in-progress record batch try to allocate a new batch
             int size = Math.max(this.batchSize, Records.LOG_OVERHEAD + Record.recordSize(key, value));
             log.trace("Allocating a new {} byte message buffer for topic {} partition {}", size, tp.topic(), tp.partition());
-            //追加失败，从BufferPool中申请新空间
+            //step6:追加失败，从BufferPool中申请新空间
             ByteBuffer buffer = free.allocate(size, maxTimeToBlock);
             synchronized (dq) {
                 // Need to check if producer is closed again after grabbing the dequeue lock.
                 if (closed)
                     throw new IllegalStateException("Cannot send after the producer is closed.");
-
+                //step7:对dq加锁后，再次调用tryAppend()方法尝试追加Record
                 RecordAppendResult appendResult = tryAppend(timestamp, key, value, callback, dq);
-                if (appendResult != null) {
+                if (appendResult != null) {//step8:追加成功则返回
                     // Somebody else found us a batch, return the one we waited for! Hopefully this doesn't happen often...
-                    free.deallocate(buffer);
+                    free.deallocate(buffer);//释放step7中申请的新空间
                     return appendResult;
                 }
                 MemoryRecords records = MemoryRecords.emptyRecords(buffer, compression, this.batchSize);
                 RecordBatch batch = new RecordBatch(tp, records, time.milliseconds());
+                //step9:在新创建的RecordBatch中增加Record,并将其添加到dq中
                 FutureRecordMetadata future = Utils.notNull(batch.tryAppend(timestamp, key, value, callback, time.milliseconds()));
 
                 dq.addLast(batch);
+                //step10:将新建的batch追加到incomplete集合
                 incomplete.add(batch);
                 return new RecordAppendResult(future, dq.size() > 1 || batch.records.isFull(), true);
             }

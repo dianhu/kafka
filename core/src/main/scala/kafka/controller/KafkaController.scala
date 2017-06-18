@@ -76,14 +76,14 @@ class ControllerContext(val zkUtils: ZkUtils,
   def liveOrShuttingDownBrokerIds = liveBrokerIdsUnderlying
   def liveOrShuttingDownBrokers = liveBrokersUnderlying
 
-  def partitionsOnBroker(brokerId: Int): Set[TopicAndPartition] = {
+  def partitionsOnBroker(brokerId: Int): Set[TopicAndPartition] = {//获取在指定Broker中存在有副本的分区集合
     partitionReplicaAssignment
       .filter { case(topicAndPartition, replicas) => replicas.contains(brokerId) }
       .map { case(topicAndPartition, replicas) => topicAndPartition }
       .toSet
   }
 
-  def replicasOnBrokers(brokerIds: Set[Int]): Set[PartitionAndReplica] = {
+  def replicasOnBrokers(brokerIds: Set[Int]): Set[PartitionAndReplica] = {//获取指定Broker集合中保存的所有副本
     brokerIds.map { brokerId =>
       partitionReplicaAssignment
         .filter { case(topicAndPartition, replicas) => replicas.contains(brokerId) }
@@ -92,7 +92,7 @@ class ControllerContext(val zkUtils: ZkUtils,
     }.flatten.toSet
   }
 
-  def replicasForTopic(topic: String): Set[PartitionAndReplica] = {
+  def replicasForTopic(topic: String): Set[PartitionAndReplica] = {//获取指定Topic的所有副本
     partitionReplicaAssignment
       .filter { case(topicAndPartition, replicas) => topicAndPartition.topic.equals(topic) }
       .map { case(topicAndPartition, replicas) =>
@@ -102,7 +102,7 @@ class ControllerContext(val zkUtils: ZkUtils,
     }.flatten.toSet
   }
 
-  def partitionsForTopic(topic: String): collection.Set[TopicAndPartition] = {
+  def partitionsForTopic(topic: String): collection.Set[TopicAndPartition] = {//获取指定Topic的所有分区
     partitionReplicaAssignment
       .filter { case(topicAndPartition, replicas) => topicAndPartition.topic.equals(topic) }.keySet
   }
@@ -111,7 +111,7 @@ class ControllerContext(val zkUtils: ZkUtils,
     replicasOnBrokers(liveBrokerIds)
   }
 
-  def replicasForPartition(partitions: collection.Set[TopicAndPartition]): collection.Set[PartitionAndReplica] = {
+  def replicasForPartition(partitions: collection.Set[TopicAndPartition]): collection.Set[PartitionAndReplica] = {//获取指定分区集合的副本
     partitions.map { p =>
       val replicas = partitionReplicaAssignment(p)
       replicas.map(r => new PartitionAndReplica(p.topic, p.partition, r))

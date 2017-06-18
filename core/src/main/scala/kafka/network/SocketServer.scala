@@ -75,7 +75,7 @@ class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time
   /**
    * Start the socket server
    */
-  def startup() {
+  def startup() {//SocketServer初始化的核心代码
     this.synchronized {
 
       connectionQuotas = new ConnectionQuotas(maxConnectionsPerIp, maxConnectionsPerIpOverrides)
@@ -96,9 +96,9 @@ class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time
           processors.slice(processorBeginIndex, processorEndIndex), connectionQuotas)
         acceptors.put(endpoint, acceptor)
         Utils.newThread("kafka-socket-acceptor-%s-%d".format(protocol.toString, endpoint.port), acceptor, false).start()
-        acceptor.awaitStartup()
+        acceptor.awaitStartup() //主线程阻塞等待Acceptor线程启动完成
 
-        processorBeginIndex = processorEndIndex
+        processorBeginIndex = processorEndIndex //修改processorBeginIndex，为下一个Endpoint准备
       }
     }
 
@@ -167,15 +167,15 @@ private[kafka] abstract class AbstractServerThread(connectionQuotas: ConnectionQ
   private val shutdownLatch = new CountDownLatch(1)
   private val alive = new AtomicBoolean(true)
 
-  def wakeup()
+  def wakeup() //抽象方法，由子类实现
 
   /**
    * Initiates a graceful shutdown by signaling to stop and waiting for the shutdown to complete
    */
   def shutdown(): Unit = {
     alive.set(false)
-    wakeup()
-    shutdownLatch.await()
+    wakeup() //唤醒当前AbstractServerThread
+    shutdownLatch.await() //阻塞等待关闭操作
   }
 
   /**

@@ -37,11 +37,20 @@ import scala.collection.JavaConverters._
 import scala.collection.{Set, mutable}
 import scala.collection.mutable.HashMap
 
+/**
+  * 维护了Controller Leader与集群中其他Broker之间的网络连接，是管理整个集群的基础
+  *
+  * @param controllerContext
+  * @param config
+  * @param time
+  * @param metrics
+  * @param threadNamePrefix
+  */
 class ControllerChannelManager(controllerContext: ControllerContext, config: KafkaConfig, time: Time, metrics: Metrics, threadNamePrefix: Option[String] = None) extends Logging {
   protected val brokerStateInfo = new HashMap[Int, ControllerBrokerStateInfo]
   private val brokerLock = new Object
   this.logIdent = "[Channel manager on controller " + config.brokerId + "]: "
-
+  //为Broker创建对应的ControllerBrokerStateInfo对象
   controllerContext.liveBrokers.foreach(addNewBroker(_))
 
   def startup() = {
@@ -274,17 +283,18 @@ class ControllerBrokerRequestBatch(controller: KafkaController) extends  Logging
     stopReplicaRequestMap.clear()
     updateMetadataRequestMap.clear()
   }
-
+  //第一个参数指定了接收LeaderAndIsrRequest的Broker集合
   def addLeaderAndIsrRequestForBrokers(brokerIds: Seq[Int], topic: String, partition: Int,
                                        leaderIsrAndControllerEpoch: LeaderIsrAndControllerEpoch,
                                        replicas: Seq[Int], callback: AbstractRequestResponse => Unit = null) {
     val topicPartition = new TopicPartition(topic, partition)
-
+    //查找broker对应的参数集合
     brokerIds.filter(_ >= 0).foreach { brokerId =>
       val result = leaderAndIsrRequestMap.getOrElseUpdate(brokerId, mutable.Map.empty)
+      //构造请求信息
       result.put(topicPartition, PartitionStateInfo(leaderIsrAndControllerEpoch, replicas.toSet))
     }
-
+    //准备向所有可用的Broker发送UpdateMetadataRequest
     addUpdateMetadataRequestForBrokers(controllerContext.liveOrShuttingDownBrokerIds.toSeq,
                                        Set(TopicAndPartition(topic, partition)))
   }
@@ -347,6 +357,10 @@ class ControllerBrokerRequestBatch(controller: KafkaController) extends  Logging
     controller.deleteTopicManager.partitionsToBeDeleted.foreach(partition => updateMetadataRequestMapFor(partition, beingDeleted = true))
   }
 
+  /**
+    * 使用上述三个集合中的数据创建相应请求，并添加到ControllerChannelManager中对应的messageQueue中，最后后RequestSendThread线程将请求发出。
+    * @param controllerEpoch
+    */
   def sendRequestsToBrokers(controllerEpoch: Int) {
     try {
       leaderAndIsrRequestMap.foreach { case (broker, partitionStateInfos) =>
