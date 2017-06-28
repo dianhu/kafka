@@ -175,7 +175,8 @@ public class Sender implements Runnable {
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
         // if there are any partitions whose leaders are not known yet, force metadata update
-        if (result.unknownLeadersExist)
+//        if (result.unknownLeadersExist)
+        if (false)
             this.metadata.requestUpdate();
 
         // remove any nodes we aren't ready to send to

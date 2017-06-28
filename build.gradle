@@ -17,7 +17,10 @@ import org.ajoberstar.grgit.Grgit
 
 buildscript {
   repositories {
-    mavenCentral()
+    mavenLocal()
+    maven {
+      url "http://maven.aliyun.com/nexus/content/groups/public/"
+    }
     jcenter()
   }
   apply from: file('gradle/buildscript.gradle'), to: buildscript
@@ -36,7 +39,10 @@ allprojects {
   apply plugin: "jacoco"
 
   repositories {
-    mavenCentral()
+    mavenLocal()
+    maven {
+      url "http://maven.aliyun.com/nexus/content/groups/public/"
+    }
   }
 
   apply plugin: 'com.github.ben-manes.versions'
