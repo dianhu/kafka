@@ -392,7 +392,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
             }
 
             @Override
-            public void onFailure(RuntimeException e) {
+            public void onFailure(RuntimeException e) {//默认提交失败后消费程序并没退出，只是打印错误日志
                 if (e instanceof RetriableException) {
                     cb.onComplete(offsets, new RetriableCommitFailedException("Commit offsets failed with retriable exception. You should retry committing offsets.", e));
                 } else {
