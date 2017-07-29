@@ -314,6 +314,8 @@ public class Fetcher<K, V> {
      */
     private long listOffset(TopicPartition partition, long timestamp) {
         while (true) {
+            //发送给KafkaApis最终由logManager.getLog去处理，找到最早和最近的消息
+            //GroupCoordinator的offsetCache只存了最新提交的offset
             RequestFuture<Long> future = sendListOffsetRequest(partition, timestamp);
             client.poll(future);
 

@@ -280,7 +280,7 @@ class GroupMetadataManager(val brokerId: Int,
       val responseCode =
         if (status.errorCode == Errors.NONE.code) {
           filteredOffsetMetadata.foreach { case (topicAndPartition, offsetAndMetadata) =>
-            putOffset(GroupTopicPartition(groupId, topicAndPartition), offsetAndMetadata)
+            putOffset(GroupTopicPartition(groupId, topicAndPartition), offsetAndMetadata)//更新offsetsCache
           }
           Errors.NONE.code
         } else {
@@ -323,7 +323,7 @@ class GroupMetadataManager(val brokerId: Int,
   def getOffsets(group: String, topicPartitions: Seq[TopicPartition]): Map[TopicPartition, OffsetFetchResponse.PartitionData] = {
     trace("Getting offsets %s for group %s.".format(topicPartitions, group))
 
-    if (isGroupLocal(group)) {
+    if (isGroupLocal(group)) {//检测GroupCoordinator是否是Consumer Group的管理者
       if (topicPartitions.isEmpty) {
         // Return offsets for all partitions owned by this consumer group. (this only applies to consumers that commit offsets to Kafka.)
         offsetsCache.filter(_._1.group == group).map { case(groupTopicPartition, offsetAndMetadata) =>

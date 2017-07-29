@@ -73,7 +73,7 @@ public class DelayedTaskQueue {
      * @param now the current time
      */
     public void poll(long now) {
-        while (!tasks.isEmpty() && tasks.peek().timeout <= now) {
+        while (!tasks.isEmpty() && tasks.peek().timeout <= now) {//tasks.peek().timeout <= now表明当poll()停止时，不会再继续发送心跳请求
             Entry entry = tasks.poll();
             entry.task.run(now);
         }

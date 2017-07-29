@@ -181,9 +181,9 @@ public class SubscriptionState {
         for (TopicPartition tp : assignments)
             if (!this.subscription.contains(tp.topic()))
                 throw new IllegalArgumentException("Assigned partition " + tp + " for non-subscribed topic.");
-        this.assignment.clear();
+        this.assignment.clear();//清空rebalance前的assignment
         for (TopicPartition tp: assignments)
-            addAssignedPartition(tp);
+            addAssignedPartition(tp);//重新赋值新的assignment
         this.needsPartitionAssignment = false;
     }
 

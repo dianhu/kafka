@@ -979,7 +979,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
 
         // fetch positions if we have partitions we're subscribed to that we
         // don't know the offset for
-        if (!subscriptions.hasAllFetchPositions())
+        if (!subscriptions.hasAllFetchPositions())//position为null则更新position位置
             updateFetchPositions(this.subscriptions.missingFetchPositions());
 
         long now = time.milliseconds();
@@ -1403,6 +1403,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      */
     private void updateFetchPositions(Set<TopicPartition> partitions) {
         // refresh commits for all assigned partitions
+        // 先从GroupCoordinator那里fetchCommittedOffsets，得到最近提交的offset,并更新到committed,如果没有则说明是初次消费
         coordinator.refreshCommittedOffsetsIfNeeded();
 
         // then do any offset lookups in case some positions are not known
