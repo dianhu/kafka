@@ -39,7 +39,7 @@ class Replica(val brokerId: Int,
   val partitionId = partition.partitionId
 
   def isLocal: Boolean = {
-    log match {
+    log match {//创建Replica对象时指定了Log，则表示是本地副本
       case Some(l) => true
       case None => false
     }

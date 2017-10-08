@@ -637,17 +637,19 @@ class ReplicaManager(val config: KafkaConfig,
             responseMap.put(topicPartition, Errors.STALE_CONTROLLER_EPOCH.code)
           }
         }
-
+        //根据PartitionState中指定的角色进行分类
         val partitionsTobeLeader = partitionState.filter { case (partition, stateInfo) =>
-          stateInfo.leader == config.brokerId
+          stateInfo.leader == config.brokerId//根据请求的leader和当前brokerid比较
         }
         val partitionsToBeFollower = (partitionState -- partitionsTobeLeader.keys)
 
         val partitionsBecomeLeader = if (!partitionsTobeLeader.isEmpty)
+          //将指定分区的副本切换成leader副本
           makeLeaders(controllerId, controllerEpoch, partitionsTobeLeader, correlationId, responseMap)
         else
           Set.empty[Partition]
         val partitionsBecomeFollower = if (!partitionsToBeFollower.isEmpty)
+          //将指定分区的副本切换成follower副本
           makeFollowers(controllerId, controllerEpoch, partitionsToBeFollower, correlationId, responseMap, metadataCache)
         else
           Set.empty[Partition]
@@ -700,6 +702,7 @@ class ReplicaManager(val config: KafkaConfig,
       // Update the partition information to be the leader
       partitionState.foreach{ case (partition, partitionStateInfo) =>
         if (partition.makeLeader(controllerId, partitionStateInfo, correlationId))
+          //记录成功从其他状态(第一次启动或follower副本)切换成leader副本的分区
           partitionsToMakeLeaders += partition
         else
           stateChangeLogger.info(("Broker %d skipped the become-leader state change after marking its partition as leader with correlation id %d from " +
@@ -771,11 +774,13 @@ class ReplicaManager(val config: KafkaConfig,
 
       // TODO: Delete leaders from LeaderAndIsrRequest
       partitionState.foreach{ case (partition, partitionStateInfo) =>
+        //检测新leader所在的broker是否存活
         val newLeaderBrokerId = partitionStateInfo.leader
         metadataCache.getAliveBrokers.find(_.id == newLeaderBrokerId) match {
           // Only change partition state when the leader is available
           case Some(leaderBroker) =>
             if (partition.makeFollower(controllerId, partitionStateInfo, correlationId))
+              //记录成功从其他状态(第一次启动或Leader)切换到follower副本的分区
               partitionsToMakeFollower += partition
             else
               stateChangeLogger.info(("Broker %d skipped the become-follower state change after marking its partition as follower with correlation id %d from " +
@@ -801,8 +806,9 @@ class ReplicaManager(val config: KafkaConfig,
           "%d epoch %d with correlation id %d for partition %s")
           .format(localBrokerId, controllerId, epoch, correlationId, TopicAndPartition(partition.topic, partition.partitionId)))
       }
-
+      //由于Leader副本发送变化，所以新旧leader副本在HW~LEO之间的消息可能是不一致的，但HW之前的消息是一致的，所以将log截断到HW
       logManager.truncateTo(partitionsToMakeFollower.map(partition => (new TopicAndPartition(partition), partition.getOrCreateReplica().highWatermark.messageOffset)).toMap)
+      //尝试完成该分区相关的DelayedOperation
       partitionsToMakeFollower.foreach { partition =>
         val topicPartitionOperationKey = new TopicPartitionOperationKey(partition.topic, partition.partitionId)
         tryCompleteDelayedProduce(topicPartitionOperationKey)
@@ -828,6 +834,7 @@ class ReplicaManager(val config: KafkaConfig,
           new TopicAndPartition(partition) -> BrokerAndInitialOffset(
             metadataCache.getAliveBrokers.find(_.id == partition.leaderReplicaIdOpt.get).get.getBrokerEndPoint(config.interBrokerSecurityProtocol),
             partition.getReplica().get.logEndOffset.messageOffset)).toMap
+        //重新开启与新leader副本同步的Fetcher线程
         replicaFetcherManager.addFetcherForPartitions(partitionsToMakeFollowerWithLeaderAndOffset)
 
         partitionsToMakeFollower.foreach { partition =>

@@ -46,7 +46,7 @@ class Partition(val topic: String,
   private val localBrokerId = replicaManager.config.brokerId
   private val logManager = replicaManager.logManager
   private val zkUtils = replicaManager.zkUtils
-  private val assignedReplicaMap = new Pool[Int, Replica]
+  private val assignedReplicaMap = new Pool[Int, Replica]//记录这个partition下的所有副本，副本id为当前broker id的就是local副本
   // The read lock is only required when multiple reads are executed and needs to be in a consistent manner
   private val leaderIsrUpdateLock = new ReentrantReadWriteLock()
   private var zkVersion: Int = LeaderAndIsr.initialZKVersion
@@ -91,6 +91,7 @@ class Partition(val topic: String,
         if (isReplicaLocal(replicaId)) {
           val config = LogConfig.fromProps(logManager.defaultConfig.originals,
                                            AdminUtils.fetchEntityConfig(zkUtils, ConfigType.Topic, topic))
+          //创建local replica对应的log,如果Log已经存在，则直接返回
           val log = logManager.createLog(TopicAndPartition(topic, partitionId), config)
           val checkpoint = replicaManager.highWatermarkCheckpoints(log.dir.getParentFile.getAbsolutePath)
           val offsetMap = checkpoint.read
@@ -270,7 +271,7 @@ class Partition(val topic: String,
           val leaderHW = leaderReplica.highWatermark
           if(!inSyncReplicas.contains(replica) &&
              assignedReplicas.map(_.brokerId).contains(replicaId) &&
-                  replica.logEndOffset.offsetDiff(leaderHW) >= 0) {
+                  replica.logEndOffset.offsetDiff(leaderHW) >= 0) {//follower副本的LEO已经追赶上HW
             val newInSyncReplicas = inSyncReplicas + replica
             info("Expanding ISR for partition [%s,%d] from %s to %s"
                          .format(topic, partitionId, inSyncReplicas.map(_.brokerId).mkString(","),
@@ -428,7 +429,7 @@ class Partition(val topic: String,
       val leaderReplicaOpt = leaderReplicaIfLocal()
       leaderReplicaOpt match {
         case Some(leaderReplica) =>
-          val log = leaderReplica.log.get
+          val log = leaderReplica.log.get //得到local leader replica对应的log日志
           val minIsr = log.config.minInSyncReplicas
           val inSyncSize = inSyncReplicas.size
 
@@ -438,7 +439,7 @@ class Partition(val topic: String,
               .format(topic, partitionId, inSyncSize, minIsr))
           }
 
-          val info = log.append(messages, assignOffsets = true)
+          val info = log.append(messages, assignOffsets = true)//最终调用日志模块
           // probably unblock some follower fetch requests since log end offset has been updated
           replicaManager.tryCompleteDelayedFetch(new TopicPartitionOperationKey(this.topic, this.partitionId))
           // we may need to increment high watermark since ISR could be down to 1

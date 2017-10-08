@@ -38,7 +38,7 @@ import org.apache.kafka.common.requests.{MetadataResponse, PartitionState, Updat
  */
 private[server] class MetadataCache(brokerId: Int) extends Logging {
   private val stateChangeLogger = KafkaController.stateChangeLogger
-  private val cache = mutable.Map[String, mutable.Map[Int, PartitionStateInfo]]()
+  private val cache = mutable.Map[String, mutable.Map[Int, PartitionStateInfo]]()  //每个topic的所有分区状态信息
   private var controllerId: Option[Int] = None
   private val aliveBrokers = mutable.Map[Int, Broker]()
   private val aliveNodes = mutable.Map[Int, collection.Map[SecurityProtocol, Node]]()
@@ -189,7 +189,7 @@ private[server] class MetadataCache(brokerId: Int) extends Logging {
             s"request sent by controller $controllerId epoch $controllerEpoch with correlation id $correlationId")
         } else {
           val partitionInfo = partitionStateToPartitionStateInfo(info)
-          addOrUpdatePartitionInfo(tp.topic, tp.partition, partitionInfo)
+          addOrUpdatePartitionInfo(tp.topic, tp.partition, partitionInfo)//更新cache
           stateChangeLogger.trace(s"Broker $brokerId cached leader info $partitionInfo for partition $tp in response to " +
             s"UpdateMetadata request sent by controller $controllerId epoch $controllerEpoch with correlation id $correlationId")
         }

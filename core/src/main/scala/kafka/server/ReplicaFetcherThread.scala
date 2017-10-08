@@ -183,6 +183,7 @@ class ReplicaFetcherThread(name: String,
 
       warn("Replica %d for partition %s reset its fetch offset from %d to current leader %d's latest offset %d"
         .format(brokerConfig.brokerId, topicAndPartition, replica.logEndOffset.messageOffset, sourceBroker.id, leaderEndOffset))
+      //将follower副本对应的log截断到leader副本的LEO位置，之后从此offset开始重新与leader进行同步
       replicaMgr.logManager.truncateTo(Map(topicAndPartition -> leaderEndOffset))
       leaderEndOffset
     } else {
