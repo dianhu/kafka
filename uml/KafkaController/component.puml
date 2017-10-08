@@ -1,0 +1,52 @@
+@startuml
+
+class KafkaController
+class ZookeeperLeaderElector
+class LeaderChangeListener
+ZookeeperLeaderElector -right-->LeaderChangeListener
+class TopicDeletionManager
+package "ReplicaLeaderSelector"{
+    class OfflinePartitionLeaderSelector
+    class ReassignedPartitionLeaderSelector
+    class PreferredReplicaPartitionLeaderSelector
+    class ControlledShutdownLeaderSelector
+}
+class PreferredReplicaElectionListener
+class IsrChangeNotificationListener
+
+class ControllerContext
+class ControllerChannelManager
+ControllerContext *-- ControllerChannelManager
+
+class ControllerBrokerRequestBatch
+
+class PartitionStateMachine
+class TopicChangeListener
+class PartitionModificationsListener
+class DeleteTopicsListener
+PartitionStateMachine *-- ControllerBrokerRequestBatch
+PartitionStateMachine *-- TopicChangeListener
+PartitionStateMachine *-- PartitionModificationsListener
+PartitionStateMachine *-- DeleteTopicsListener
+
+class ReplicaStateMachine
+class BrokerChangeListener
+ReplicaStateMachine *-- ControllerBrokerRequestBatch
+ReplicaStateMachine *-- BrokerChangeListener
+
+
+
+KafkaController -up--> ZookeeperLeaderElector
+KafkaController -up--> TopicDeletionManager
+KafkaController *-- ReassignedPartitionLeaderSelector
+KafkaController *-- PreferredReplicaPartitionLeaderSelector
+KafkaController *-- ControlledShutdownLeaderSelector
+KafkaController *-- OfflinePartitionLeaderSelector
+KafkaController *-- PreferredReplicaElectionListener
+KafkaController *-- IsrChangeNotificationListener
+KafkaController *-- ControllerContext
+KafkaController *-- ControllerBrokerRequestBatch
+KafkaController *-- PartitionStateMachine
+KafkaController *-- ReplicaStateMachine
+
+@enduml
