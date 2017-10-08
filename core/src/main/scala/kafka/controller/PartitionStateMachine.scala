@@ -291,6 +291,7 @@ class PartitionStateMachine(controller: KafkaController) extends Logging {
         debug("Initializing leader and isr for partition %s to %s".format(topicAndPartition, leaderIsrAndControllerEpoch))
         try {
           zkUtils.createPersistentPath(
+            //具体路径是“/brokers/topics/[topic_name]/partitions/[partitionId]/state”  --hcy
             getTopicPartitionLeaderAndIsrPath(topicAndPartition.topic, topicAndPartition.partition),
             zkUtils.leaderAndIsrZkData(leaderIsrAndControllerEpoch.leaderAndIsr, controller.epoch))
           // NOTE: the above write can fail only if the current controller lost its zk session and the new controller
@@ -418,15 +419,19 @@ class PartitionStateMachine(controller: KafkaController) extends Logging {
       inLock(controllerContext.controllerLock) {
         if (hasStarted.get) {
           try {
+            //获取"/brokers/topics"下的子节点集合
             val currentChildren = {
               import JavaConversions._
               debug("Topic change listener fired for path %s with children %s".format(parentPath, children.mkString(",")))
               (children: Buffer[String]).toSet
             }
+            //过滤，得到新添加topic
             val newTopics = currentChildren -- controllerContext.allTopics
+            //过滤，得到删除的topic
             val deletedTopics = controllerContext.allTopics -- currentChildren
+            //更新controllerContext的allTopics集合
             controllerContext.allTopics = currentChildren
-
+            //更新AR集合记录
             val addedPartitionReplicaAssignment = zkUtils.getReplicaAssignmentForTopics(newTopics.toSeq)
             controllerContext.partitionReplicaAssignment = controllerContext.partitionReplicaAssignment.filter(p =>
               !deletedTopics.contains(p._1.topic))
@@ -459,26 +464,33 @@ class PartitionStateMachine(controller: KafkaController) extends Logging {
     @throws(classOf[Exception])
     def handleChildChange(parentPath : String, children : java.util.List[String]) {
       inLock(controllerContext.controllerLock) {
+        //从zk中获取待删除topic集合，zk路径"/admin/delete_topics"
         var topicsToBeDeleted = {
           import JavaConversions._
           (children: Buffer[String]).toSet
         }
         debug("Delete topics listener fired for topics %s to be deleted".format(topicsToBeDeleted.mkString(",")))
+        //检查待删除topic是否存在
         val nonExistentTopics = topicsToBeDeleted.filter(t => !controllerContext.allTopics.contains(t))
         if(nonExistentTopics.size > 0) {
           warn("Ignoring request to delete non-existing topics " + nonExistentTopics.mkString(","))
+          //对不存在的topic，直接将起对应的节点删除
           nonExistentTopics.foreach(topic => zkUtils.deletePathRecursive(getDeleteTopicPath(topic)))
         }
+        //过滤掉不存在的待删除topic
         topicsToBeDeleted --= nonExistentTopics
         if(topicsToBeDeleted.size > 0) {
           info("Starting topic deletion for topics " + topicsToBeDeleted.mkString(","))
           // mark topic ineligible for deletion if other state changes are in progress
           topicsToBeDeleted.foreach { topic =>
+            //检测topic中是否有分区正在进行“优先副本”选举
             val preferredReplicaElectionInProgress =
               controllerContext.partitionsUndergoingPreferredReplicaElection.map(_.topic).contains(topic)
+            //检测topic中是否有分区正在进行副本重新分配
             val partitionReassignmentInProgress =
               controllerContext.partitionsBeingReassigned.keySet.map(_.topic).contains(topic)
             if(preferredReplicaElectionInProgress || partitionReassignmentInProgress)
+              //将topic标记为不可删除
               controller.deleteTopicManager.markTopicIneligibleForDeletion(Set(topic))
           }
           // add topic to deletion list
@@ -502,7 +514,7 @@ class PartitionStateMachine(controller: KafkaController) extends Logging {
     this.logIdent = "[AddPartitionsListener on " + controller.config.brokerId + "]: "
 
     @throws(classOf[Exception])
-    def handleDataChange(dataPath : String, data: Object) {
+    def handleDataChange(dataPath : String, data: Object) {//dataPath:"/brokers/topics/[topic_name]" --hcy
       inLock(controllerContext.controllerLock) {
         try {
           info(s"Partition modification triggered $data for path $dataPath")

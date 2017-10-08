@@ -351,7 +351,7 @@ class ReplicaStateMachine(controller: KafkaController) extends Logging {
    */
   class BrokerChangeListener() extends IZkChildListener with Logging {
     this.logIdent = "[BrokerChangeListener on Controller " + controller.config.brokerId + "]: "
-    def handleChildChange(parentPath : String, currentBrokerList : java.util.List[String]) {
+    def handleChildChange(parentPath : String, currentBrokerList : java.util.List[String]) {//parentPath:"/brokers/ids" --hcy
       info("Broker change listener fired for path %s with children %s".format(parentPath, currentBrokerList.sorted.mkString(",")))
       inLock(controllerContext.controllerLock) {
         if (hasStarted.get) {

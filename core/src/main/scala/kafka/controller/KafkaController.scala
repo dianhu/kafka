@@ -632,7 +632,7 @@ class KafkaController(val config : KafkaConfig, zkUtils: ZkUtils, val brokerStat
             throw new KafkaException("Partition %s to be reassigned is already assigned to replicas".format(topicAndPartition) +
               " %s. Ignoring request for partition reassignment".format(newReplicas.mkString(",")))
           } else {
-            if(aliveNewReplicas == newReplicas) {
+            if(aliveNewReplicas == newReplicas) {//判断新AR是否都可用
               info("Handling reassignment of partition %s to new replicas %s".format(topicAndPartition, newReplicas.mkString(",")))
               // first register ISR change listener
               watchIsrChangesForReassignedPartition(topic, partition, reassignedPartitionContext)
@@ -739,16 +739,22 @@ class KafkaController(val config : KafkaConfig, zkUtils: ZkUtils, val brokerStat
 
   private def initializeControllerContext() {
     // update controller cache with delete topic information
+    //读取“/brokers/ids”,初始化可用broker集合
     controllerContext.liveBrokers = zkUtils.getAllBrokersInCluster().toSet
+    //读取“/brokers/topics”,初始化集群中全部的topics信息
     controllerContext.allTopics = zkUtils.getAllTopics().toSet
+    //读取“/brokers/topics/[topic_name]/partitions”，初始化每个Partition的AR集合信息
     controllerContext.partitionReplicaAssignment = zkUtils.getReplicaAssignmentForTopics(controllerContext.allTopics.toSeq)
     controllerContext.partitionLeadershipInfo = new mutable.HashMap[TopicAndPartition, LeaderIsrAndControllerEpoch]
     controllerContext.shuttingDownBrokerIds = mutable.Set.empty[Int]
     // update the leader and isr cache for all existing partitions from Zookeeper
+    //读取“/brokers/topics/[topic_name]/partitions/[partitionId]/state”，初始化每个partition的leader,isr集合信息
     updateLeaderAndIsrCache()
     // start the channel manager
     startChannelManager()
+    //读取“/admin/preferred_replica_election”,初始化需要“优先副本”选举的partition
     initializePreferredReplicaElection()
+    //读取“/admin/reassign_partitions”,初始化需要进行副本重新分配的partition
     initializePartitionReassignment()
     initializeTopicDeletion()
     info("Currently active brokers in the cluster: %s".format(controllerContext.liveBrokerIds))
@@ -1171,8 +1177,8 @@ class KafkaController(val config : KafkaConfig, zkUtils: ZkUtils, val brokerStat
     def handleNewSession() {
       info("ZK expired; shut down all controller components and try to re-elect")
       inLock(controllerContext.controllerLock) {
-        onControllerResignation()
-        controllerElector.elect
+        onControllerResignation()//负责清理KafkaController依赖对象
+        controllerElector.elect//尝试选举新Controller Leader
       }
     }
 
@@ -1255,21 +1261,25 @@ class PartitionsReassignedListener(controller: KafkaController) extends IZkDataL
    * @throws Exception On any error.
    */
   @throws(classOf[Exception])
-  def handleDataChange(dataPath: String, data: Object) {
+  def handleDataChange(dataPath: String, data: Object) {//dataPath:"/admin/reassign_partitions" --hcy
     debug("Partitions reassigned listener fired for path %s. Record partitions to be reassigned %s"
       .format(dataPath, data))
+    //1.读取分区的副本重分配信息
     val partitionsReassignmentData = zkUtils.parsePartitionReassignmentData(data.toString)
+    //2.过滤掉正在进行重新分配的分区
     val partitionsToBeReassigned = inLock(controllerContext.controllerLock) {
       partitionsReassignmentData.filterNot(p => controllerContext.partitionsBeingReassigned.contains(p._1))
     }
     partitionsToBeReassigned.foreach { partitionToBeReassigned =>
       inLock(controllerContext.controllerLock) {
+        //3.检测其topic是否为待删除topic
         if(controller.deleteTopicManager.isTopicQueuedUpForDeletion(partitionToBeReassigned._1.topic)) {
           error("Skipping reassignment of partition %s for topic %s since it is currently being deleted"
             .format(partitionToBeReassigned._1, partitionToBeReassigned._1.topic))
           controller.removePartitionFromReassignedPartitions(partitionToBeReassigned._1)
         } else {
           val context = new ReassignedPartitionsContext(partitionToBeReassigned._2)
+          //4.为副本重新分配做一些准备工作
           controller.initiateReassignReplicasForTopicPartition(partitionToBeReassigned._1, context)
         }
       }
@@ -1349,7 +1359,7 @@ class ReassignedPartitionsIsrChangeListener(controller: KafkaController, topic: 
  */
 class IsrChangeNotificationListener(controller: KafkaController) extends IZkChildListener with Logging {
 
-  override def handleChildChange(parentPath: String, currentChildren: util.List[String]): Unit = {
+  override def handleChildChange(parentPath: String, currentChildren: util.List[String]): Unit = {//parentPath:"/isr_change_notification" --hcy
     import scala.collection.JavaConverters._
 
     inLock(controller.controllerContext.controllerLock) {

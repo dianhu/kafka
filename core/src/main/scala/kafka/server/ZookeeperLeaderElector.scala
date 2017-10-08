@@ -62,13 +62,13 @@ class ZookeeperLeaderElector(controllerContext: ControllerContext,
     val timestamp = SystemTime.milliseconds.toString
     val electString = Json.encode(Map("version" -> 1, "brokerid" -> brokerId, "timestamp" -> timestamp))
    
-   leaderId = getControllerID 
+   leaderId = getControllerID //获取当前zk中记录的leader
     /* 
      * We can get here during the initial startup and the handleDeleted ZK callback. Because of the potential race condition, 
      * it's possible that the controller has already been elected when we get here. This check will prevent the following 
      * createEphemeralPath method from getting into an infinite loop if this broker is already the controller.
      */
-    if(leaderId != -1) {
+    if(leaderId != -1) {//已存在leader，放弃选举
        debug("Broker %d has been elected as leader, so stopping the election process.".format(leaderId))
        return amILeader
     }
@@ -78,10 +78,10 @@ class ZookeeperLeaderElector(controllerContext: ControllerContext,
                                                       electString,
                                                       controllerContext.zkUtils.zkConnection.getZookeeper,
                                                       JaasUtils.isZkSecurityEnabled())
-      zkCheckedEphemeral.create()
+      zkCheckedEphemeral.create()//尝试创建临时节点，如果临时节点已存在，则抛出异常
       info(brokerId + " successfully elected as leader")
-      leaderId = brokerId
-      onBecomingLeader()
+      leaderId = brokerId//更新leaderId字段，当前broker成功成为controller leader
+      onBecomingLeader()//实际是KafkaController.onControllerFailover()方法
     } catch {
       case e: ZkNodeExistsException =>
         // If someone else has written the path, then
