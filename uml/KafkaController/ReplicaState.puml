@@ -1,0 +1,23 @@
+@startuml
+
+state NewReplica:新创建的副本，此状态只能成为Follower
+state OnlineReplica:正常工作的副本，可以成为Leader，也可以成为Follower
+state OfflineReplica:副本所在的Broker下线
+state ReplicaDeletionStarted:刚开始删除副本时，会先将副本转换为此状态，然后开始删除操作
+state ReplicaDeletionSuccessful:副本被成功删除后，转换为此状态
+state ReplicaDeletionIneligible:副本删除失败，转换为此状态
+state NonExistentReplica:副本被成功删除后最终转换为此状态
+
+NonExistentReplica --> NewReplica
+NewReplica --> OnlineReplica
+OfflineReplica --> OnlineReplica
+ReplicaDeletionIneligible --> OnlineReplica
+OnlineReplica --> OnlineReplica
+NewReplica --> OfflineReplica
+OnlineReplica --> OfflineReplica
+ReplicaDeletionIneligible --> OfflineReplica
+OfflineReplica --> ReplicaDeletionStarted
+ReplicaDeletionStarted --> ReplicaDeletionIneligible
+ReplicaDeletionStarted --> ReplicaDeletionSuccessful
+ReplicaDeletionSuccessful --> NonExistentReplica
+@enduml

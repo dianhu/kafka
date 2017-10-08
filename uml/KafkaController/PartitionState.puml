@@ -1,0 +1,19 @@
+@startuml
+
+state NonExistentPartition:分区从来没有被创建或是分区创建之后被又删除掉了
+state NewPartition:分区被创建后处于此状态
+state NewPartition:已被分配了AR集合，但是还没有指定Leader副本和ISR集合
+state OnlinePartition:已经成功选举出分区的Leader副本，Leader副本发生宕机
+state OnlinePartition:或者新创建的分区直接转换为此状态
+state OfflinePartition:分区成功选举出Leader副本后，转换为此状态
+
+NonExistentPartition -right--> NewPartition
+NewPartition --> OfflinePartition
+OnlinePartition --> OfflinePartition
+NewPartition --> OnlinePartition
+OfflinePartition --> OnlinePartition
+OnlinePartition --> OnlinePartition
+OfflinePartition --> NonExistentPartition
+
+
+@enduml
